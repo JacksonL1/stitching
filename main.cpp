@@ -28,7 +28,7 @@ using namespace cv::detail;
 // Default command line args
 //vector<String> img_names;
 bool preview = false;
-bool try_cuda = true;
+bool try_cuda = false;
 double work_megapix = 0.6;
 double seam_megapix = 0.1;
 double compose_megapix = -1;
@@ -41,7 +41,6 @@ string ba_refine_mask = "xxxxx";
 bool do_wave_correct = false;
 WaveCorrectKind wave_correct = detail::WAVE_CORRECT_HORIZ;
 string warp_type = "spherical";
-int expos_comp_type = ExposureCompensator::GAIN_BLOCKS;
 float match_conf = 0.3f;
 int range_width = -1;
 
@@ -51,9 +50,6 @@ int main(int argc, char* argv[])
 	int64 app_start_time = getTickCount();
 #endif
 
-#if 0
-	cv::setBreakOnError(true);
-#endif
 	vector<cv::String> videoNames{"D:/video/212.flv","D:/video/211.flv"};
 	int num_images = static_cast<int>(videoNames.size());
 	vector<UMat> src(num_images);
@@ -86,20 +82,12 @@ int main(int argc, char* argv[])
 	Ptr<FeaturesFinder> finder;
 	if (features_type == "surf")
 	{
-#ifdef HAVE_OPENCV_XFEATURES2D
-		if (try_cuda && cuda::getCudaEnabledDeviceCount() > 0)
-			finder = makePtr<SurfFeaturesFinderGpu>();
-		else
-#endif
-			finder = makePtr<SurfFeaturesFinder>();
+		finder = makePtr<SurfFeaturesFinder>();
 	}
 	else if (features_type == "orb")
 	{
 		finder = makePtr<OrbFeaturesFinder>();
 	}
-	/*else if (features_type == "sift") {
-		finder = makePtr<SiftFeaturesFinder>();
-	}*/
 	else
 	{
 		cout << "Unknown 2D features type: '" << features_type << "'.\n";
@@ -174,7 +162,7 @@ int main(int argc, char* argv[])
 
 	(*matcher)(features, pairwise_matches);
 	matcher->collectGarbage();
-
+	
 	LOGLN("Pairwise matching, time: " << ((getTickCount() - t) / getTickFrequency()) << " sec");
 
 	// Leave only images we are sure are from the same panorama
@@ -293,52 +281,38 @@ int main(int argc, char* argv[])
 	// Warp images and their masks
 
 	Ptr<WarperCreator> warper_creator;
-#ifdef HAVE_OPENCV_CUDAWARPING
-	if (try_cuda && cuda::getCudaEnabledDeviceCount() > 0)
-	{
-		if (warp_type == "plane")
-			warper_creator = makePtr<cv::PlaneWarperGpu>();
-		else if (warp_type == "cylindrical")
-			warper_creator = makePtr<cv::CylindricalWarperGpu>();
-		else if (warp_type == "spherical")
-			warper_creator = makePtr<cv::SphericalWarperGpu>();
-	}
-	else
-#endif
-	{
-		if (warp_type == "plane")
-			warper_creator = makePtr<cv::PlaneWarper>();
-		else if (warp_type == "affine")
-			warper_creator = makePtr<cv::AffineWarper>();
-		else if (warp_type == "cylindrical")
-			warper_creator = makePtr<cv::CylindricalWarper>();
-		else if (warp_type == "spherical")
-			warper_creator = makePtr<cv::SphericalWarper>();
-		else if (warp_type == "fisheye")
-			warper_creator = makePtr<cv::FisheyeWarper>();
-		else if (warp_type == "stereographic")
-			warper_creator = makePtr<cv::StereographicWarper>();
-		else if (warp_type == "compressedPlaneA2B1")
-			warper_creator = makePtr<cv::CompressedRectilinearWarper>(2.0f, 1.0f);
-		else if (warp_type == "compressedPlaneA1.5B1")
-			warper_creator = makePtr<cv::CompressedRectilinearWarper>(1.5f, 1.0f);
-		else if (warp_type == "compressedPlanePortraitA2B1")
-			warper_creator = makePtr<cv::CompressedRectilinearPortraitWarper>(2.0f, 1.0f);
-		else if (warp_type == "compressedPlanePortraitA1.5B1")
-			warper_creator = makePtr<cv::CompressedRectilinearPortraitWarper>(1.5f, 1.0f);
-		else if (warp_type == "paniniA2B1")
-			warper_creator = makePtr<cv::PaniniWarper>(2.0f, 1.0f);
-		else if (warp_type == "paniniA1.5B1")
-			warper_creator = makePtr<cv::PaniniWarper>(1.5f, 1.0f);
-		else if (warp_type == "paniniPortraitA2B1")
-			warper_creator = makePtr<cv::PaniniPortraitWarper>(2.0f, 1.0f);
-		else if (warp_type == "paniniPortraitA1.5B1")
-			warper_creator = makePtr<cv::PaniniPortraitWarper>(1.5f, 1.0f);
-		else if (warp_type == "mercator")
-			warper_creator = makePtr<cv::MercatorWarper>();
-		else if (warp_type == "transverseMercator")
-			warper_creator = makePtr<cv::TransverseMercatorWarper>();
-	}
+	if (warp_type == "plane")
+		warper_creator = makePtr<cv::PlaneWarper>();
+	else if (warp_type == "affine")
+		warper_creator = makePtr<cv::AffineWarper>();
+	else if (warp_type == "cylindrical")
+		warper_creator = makePtr<cv::CylindricalWarper>();
+	else if (warp_type == "spherical")
+		warper_creator = makePtr<cv::SphericalWarper>();
+	else if (warp_type == "fisheye")
+		warper_creator = makePtr<cv::FisheyeWarper>();
+	else if (warp_type == "stereographic")
+		warper_creator = makePtr<cv::StereographicWarper>();
+	else if (warp_type == "compressedPlaneA2B1")
+		warper_creator = makePtr<cv::CompressedRectilinearWarper>(2.0f, 1.0f);
+	else if (warp_type == "compressedPlaneA1.5B1")
+		warper_creator = makePtr<cv::CompressedRectilinearWarper>(1.5f, 1.0f);
+	else if (warp_type == "compressedPlanePortraitA2B1")
+		warper_creator = makePtr<cv::CompressedRectilinearPortraitWarper>(2.0f, 1.0f);
+	else if (warp_type == "compressedPlanePortraitA1.5B1")
+		warper_creator = makePtr<cv::CompressedRectilinearPortraitWarper>(1.5f, 1.0f);
+	else if (warp_type == "paniniA2B1")
+		warper_creator = makePtr<cv::PaniniWarper>(2.0f, 1.0f);
+	else if (warp_type == "paniniA1.5B1")
+		warper_creator = makePtr<cv::PaniniWarper>(1.5f, 1.0f);
+	else if (warp_type == "paniniPortraitA2B1")
+		warper_creator = makePtr<cv::PaniniPortraitWarper>(2.0f, 1.0f);
+	else if (warp_type == "paniniPortraitA1.5B1")
+		warper_creator = makePtr<cv::PaniniPortraitWarper>(1.5f, 1.0f);
+	else if (warp_type == "mercator")
+		warper_creator = makePtr<cv::MercatorWarper>();
+	else if (warp_type == "transverseMercator")
+		warper_creator = makePtr<cv::TransverseMercatorWarper>();
 
 	if (!warper_creator)
 	{
@@ -358,8 +332,6 @@ int main(int argc, char* argv[])
 
 		corners[i] = warper->warp(images[i], K, cameras[i].R, INTER_LINEAR, BORDER_REFLECT, images_warped[i]);
 		sizes[i] = images_warped[i].size();
-
-		warper->warp(masks[i], K, cameras[i].R, INTER_NEAREST, BORDER_CONSTANT, masks_warped[i]);
 	}
 
 	vector<UMat> images_warped_f(num_images);
@@ -367,15 +339,12 @@ int main(int argc, char* argv[])
 		images_warped[i].convertTo(images_warped_f[i], CV_32F);
 
 	LOGLN("Warping images, time: " << ((getTickCount() - t) / getTickFrequency()) << " sec");
-
-	Ptr<ExposureCompensator> compensator = ExposureCompensator::createDefault(expos_comp_type);
-	compensator->feed(corners, images_warped, masks_warped);
-
 	// Release unused memory
 	images.clear();
 	images_warped.clear();
 	images_warped_f.clear();
 	masks.clear();
+	img.release();
 
 	LOGLN("Compositing...");
 #if ENABLE_LOG
@@ -384,9 +353,33 @@ int main(int argc, char* argv[])
 	//double compose_seam_aspect = 1;
 	double compose_work_aspect = 1;
 	bool firstFlag = true;
-	UMat K;
+	vector<UMat> vecK;
 	vector<cv::UMat> vecWarpedImg;
-	Size dst_sz;
+	// Compute relative scales
+	compose_work_aspect = compose_scale / work_scale;
+
+	// Update warped image scale
+	warped_image_scale *= static_cast<float>(compose_work_aspect);
+	warper = warper_creator->create(warped_image_scale);
+
+	// Update corners and sizes
+	for (int i = 0; i < num_images; ++i)
+	{
+		// Update intrinsics
+		cameras[i].focal *= compose_work_aspect;
+		cameras[i].ppx *= compose_work_aspect;
+		cameras[i].ppy *= compose_work_aspect;
+
+		// Update corner and size
+		Size sz = full_img_sizes[i];
+		cv::UMat kt;
+		cameras[i].K().convertTo(kt, CV_32F);
+		vecK.push_back(kt);
+		Rect roi = warper->warpRoi(sz, kt, cameras[i].R);
+		corners[i] = roi.tl();
+		sizes[i] = roi.size();
+	}
+
 	while (1) {
 		t = getTickCount();
 		for (int img_idx = 0; img_idx < num_images; ++img_idx)
@@ -396,72 +389,25 @@ int main(int argc, char* argv[])
 			// Read image and resize it if necessary
 			full_img = src[img_idx];
 			UMat img_warped, img_warped_s;
-			Size img_size;
-			if (abs(compose_scale - 1) > 1e-1)
-				cv::resize(full_img, img, Size(), compose_scale, compose_scale, INTER_LINEAR_EXACT);
-			else
-				img = full_img;
-			
-			img_size = img.size();
-			cameras[img_idx].K().convertTo(K, CV_32F);
-			if (firstFlag) {
-				if (!is_compose_scale_set)
-				{
-					if (compose_megapix > 0)
-						compose_scale = min(1.0, sqrt(compose_megapix * 1e6 / full_img.size().area()));
-					is_compose_scale_set = true;
-
-					// Compute relative scales
-					compose_work_aspect = compose_scale / work_scale;
-
-					// Update warped image scale
-					warped_image_scale *= static_cast<float>(compose_work_aspect);
-					warper = warper_creator->create(warped_image_scale);
-
-					// Update corners and sizes
-					for (int i = 0; i < num_images; ++i)
-					{
-						// Update intrinsics
-						cameras[i].focal *= compose_work_aspect;
-						cameras[i].ppx *= compose_work_aspect;
-						cameras[i].ppy *= compose_work_aspect;
-
-						// Update corner and size
-						Size sz = full_img_sizes[i];
-						if (std::abs(compose_scale - 1) > 1e-1)
-						{
-							sz.width = cvRound(full_img_sizes[i].width * compose_scale);
-							sz.height = cvRound(full_img_sizes[i].height * compose_scale);
-						}
-						cv::Mat kt;
-						cameras[i].K().convertTo(kt, CV_32F);
-						Rect roi = warper->warpRoi(sz, kt, cameras[i].R);
-						corners[i] = roi.tl();
-						sizes[i] = roi.size();
-					}
-				}
-				firstFlag = false;
-			}
-			
-			
 			double t1 = getTickCount();
 			// Warp the current image
-			warper->warp(img, K, cameras[img_idx].R, INTER_LINEAR, BORDER_REFLECT, img_warped);
-			LOGLN("warp, time: " << ((getTickCount() - t1) / getTickFrequency()) << " sec");
-			
-			
+			warper->warp(full_img, vecK[img_idx], cameras[img_idx].R, INTER_LINEAR, BORDER_REFLECT, img_warped);
+			//LOGLN("warp, time: " << ((getTickCount() - t1) / getTickFrequency()) << " sec");
 			// Compensate exposure
 			//img_warped.convertTo(img_warped_s, CV_16S);
 			img_warped.convertTo(img_warped_s, CV_8UC3);
 			img_warped.release();
 			full_img.release();
-			img.release();
-
 			vecWarpedImg.push_back(img_warped_s);
 		}
 		UMat result;
+		
 		int y_dv, x_dv;
 		bool first_left = true, first_top = true;
+		/*vector<float> gains;
+		cv::UMat temp1;
+		cv::UMat temp2;*/
+
 		if (corners[0].y > corners[1].y) {
 			y_dv = corners[0].y - corners[1].y;
 			first_top = false;
@@ -478,12 +424,21 @@ int main(int argc, char* argv[])
 			first_left = false;
 		}
 		else {
-			x_dv = dst_sz.width + corners[0].x + sizes[0].width - corners[1].x;
+			x_dv = corners[0].x + sizes[0].width - corners[1].x;
+			/*temp1 = vecWarpedImg[0](cv::Rect(sizes[0].width - x_dv, corners[1].y - corners[0].y + sizes[0].height / 3, x_dv, sizes[0].height / 3));
+			temp2 = vecWarpedImg[1](cv::Rect(0, sizes[0].height / 3, x_dv, sizes[0].height / 3));
+			cvtColor(temp1, temp1, CV_BGR2YUV);
+			cvtColor(temp2, temp2, CV_BGR2YUV);
+			Scalar tmp1Mean = mean(temp1);
+			Scalar tmp2Mean = mean(temp2);
+			gains.push_back(tmp1Mean.val[0] / tmp2Mean.val[0]);
+			gains.push_back(tmp1Mean.val[1] / tmp2Mean.val[1]);
+			gains.push_back(tmp1Mean.val[2] / tmp2Mean.val[2]);*/
 			vecWarpedImg[0] = vecWarpedImg[0](cv::Rect(0, 0, vecWarpedImg[0].cols - x_dv / 2, vecWarpedImg[0].rows));
 			vecWarpedImg[1] = vecWarpedImg[1](cv::Rect(x_dv / 2, 0, vecWarpedImg[1].cols - x_dv / 2, vecWarpedImg[1].rows));
 			first_left = true;
 		}
-
+		
 		if (vecWarpedImg[0].rows > vecWarpedImg[1].rows) {
 			int h = vecWarpedImg[0].rows - vecWarpedImg[1].rows;
 			int w = vecWarpedImg[0].cols - vecWarpedImg[1].cols;
@@ -510,6 +465,10 @@ int main(int argc, char* argv[])
 				copyMakeBorder(vecWarpedImg[0], vecWarpedImg[0], y_dv + h, 0, 0, 0, BORDER_CONSTANT);
 			}
 		}
+		/*cv::UMat yuvImg;
+		cvtColor(vecWarpedImg[1], yuvImg, CV_BGR2YUV);
+		multiply(yuvImg, Scalar(gains[0], gains[1], gains[2]), yuvImg);
+		cvtColor(yuvImg, vecWarpedImg[1], CV_YUV2BGR);*/
 		if (first_left) {
 			cv::hconcat(vecWarpedImg[0], vecWarpedImg[1], result);
 		}
