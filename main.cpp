@@ -384,13 +384,12 @@ int main(int argc, char* argv[])
 	//double compose_seam_aspect = 1;
 	double compose_work_aspect = 1;
 	bool firstFlag = true;
-	vector<UMat> vecK;
 	vector<cv::UMat> vecWarpedImg;
 	compose_work_aspect = compose_scale / work_scale;
 	// Update warped image scale
 	warped_image_scale *= static_cast<float>(compose_work_aspect);
 	warper = warper_creator->create(warped_image_scale);
-
+	vector<UMat> vecXMap(num_images), vecYMap(num_images), vecDst(num_images);
 	for (int i = 0; i < num_images; ++i)
 	{
 		// Update intrinsics
@@ -400,9 +399,10 @@ int main(int argc, char* argv[])
 
 		// Update corner and size
 		Size sz = full_img_sizes[i];
-		cv::UMat kt;
+		cv::UMat kt, xmap, ymap;
 		cameras[i].K().convertTo(kt, CV_32F);
-		vecK.push_back(kt);
+		Rect map_roi = warper->buildMaps(src[i].size(), kt, cameras[i].R, vecXMap[i], vecYMap[i]);
+		vecDst[i].create(map_roi.height + 1, map_roi.width + 1, src[i].type());
 		Rect roi = warper->warpRoi(sz, kt, cameras[i].R);
 		corners[i] = roi.tl();
 		sizes[i] = roi.size();
@@ -421,9 +421,8 @@ int main(int argc, char* argv[])
 			int dy = corners[img_idx].y - dst_roi.y;
 			// Read image and resize it if necessary
 			full_img = src[img_idx];
-			UMat img_warped;
 			double warp_t = getTickCount();
-			warper->warp(full_img, vecK[img_idx], cameras[img_idx].R, INTER_LINEAR, BORDER_REFLECT, img_warped);
+			remap(full_img, vecDst[img_idx], vecXMap[img_idx], vecYMap[img_idx], INTER_LINEAR, BORDER_REFLECT);
 			LOGLN("warp, time: " << ((getTickCount() - warp_t) / getTickFrequency() * 1000.0) << " ms");
 			full_img.release();
 			int w_thre = 0;
@@ -433,8 +432,8 @@ int main(int argc, char* argv[])
 			}
 			UMat dst_roi_ = dst_(Rect(dx, dy, sizes[img_idx].width - w_thre, sizes[img_idx].height));
 			finalX = dx + sizes[img_idx].width - w_thre;
-			img_warped = img_warped(Rect(w_thre, 0, sizes[img_idx].width - w_thre, sizes[img_idx].height));
-			img_warped.copyTo(dst_roi_);
+			vecDst[img_idx] = vecDst[img_idx](Rect(w_thre, 0, sizes[img_idx].width - w_thre, sizes[img_idx].height));
+			vecDst[img_idx].copyTo(dst_roi_);
 		}
 		LOGLN("Compositing, time: " << ((getTickCount() - t) / getTickFrequency() * 1000.0) << " ms");
 
